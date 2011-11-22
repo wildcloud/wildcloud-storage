@@ -1,0 +1,10 @@
+{
+  "name": "wildcloud-storage",
+  "version": "0.0.1",
+  "description": "Storage backend for Wildcloud.",
+  "author": "Marek Jelen <marek@jelen.biz>",
+  "main": "./server.js",
+  "dependencies": {
+    "mongodb": "0.9.7-0"
+  }
+}
