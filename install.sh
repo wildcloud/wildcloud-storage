@@ -57,5 +57,4 @@ git clone git://github.com/marekjelen/wildcloud-storage.git
 
 # Start Wildcloud storage
 # cd ~/wildcloud-storage
-# mkdir logs
 # forever start -v -o logs/out.log -e logs/err.log server.js
