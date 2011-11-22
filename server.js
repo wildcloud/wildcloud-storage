@@ -1,7 +1,6 @@
 var mongo = require('mongodb');
 var http = require('http');
 var url = require('url');
-var yaml = require('yaml');
 var fs = require('fs');
 
 var start = function(db, Config){
