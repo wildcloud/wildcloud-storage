@@ -5,6 +5,7 @@
   "author": "Marek Jelen <marek@jelen.biz>",
   "main": "./server.js",
   "dependencies": {
-    "mongodb": "0.9.7-0"
+    "mongodb": "0.9.7-0",
+    "winstion": "0.5.7"
   }
 }
