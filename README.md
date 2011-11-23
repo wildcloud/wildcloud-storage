@@ -6,19 +6,23 @@ Responsible for storage in Wildcloud. Right now uses MongoDB GridFS as backend, 
 
 Specify special header to autheticate your application
 
-  X-Appid: <application id>
+    X-Appid: <application id>
 
 To save a file into the storage
 
-  PUT /some/path
+    PUT /some/path
 
 to get file from storage
 
-  GET /some/path
+    GET /some/path
+
+to list files in storage
+
+    GET /_list_files
 
 and delete the file
 
-  DELETE /some/path
+    DELETE /some/path
 
 ## LICENSE
 
