@@ -174,10 +174,10 @@ Storage = function() {
     var done = false;
     var pool = [];
     // Buffer request until file is opened
-    request.on('data', function(data){
+    request.on('data', onBufferData = function(data){
       pool.push(data);
     });
-    request.on('end', function(){
+    request.on('end', onBufferEnd = function(){
       done = true;
     });
     gs.open(function(error, file){
@@ -194,8 +194,11 @@ Storage = function() {
           file.write(pool[index], function() {});
         };
       };
-      // Empty the pool
+      // Clean buffering
       pool = [];
+      request.removeListener('data', onBufferData);
+      request.removeListener('end', onBufferEnd);
+      // Called when file uploaded and closed
       var fileClose = function(){
         self.log.debug('(' + ruid + ') File uploaded.');
         response.end('OK');
