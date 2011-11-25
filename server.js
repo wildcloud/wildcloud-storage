@@ -98,7 +98,7 @@ Storage = function() {
         self.handleListFiles(response, ruid, appid);
       }else{
         // File downloads
-        self.handleDownload(response, ruid, path);
+        self.handleDownload(response, ruid, path, request);
       };
       return;
     };
@@ -144,7 +144,7 @@ Storage = function() {
   };
 
   // Handles file downloads
-  this.handleDownload = function(response, ruid, path){
+  this.handleDownload = function(response, ruid, path, request){
     var gs = new Mongo.GridStore(self.database, path, "r");
     gs.open(function(error, file){
       if(error){
@@ -157,22 +157,14 @@ Storage = function() {
         'Content-length': file.length
       });
       stream = file.stream(true);
-      stream.on('data', function(data){
-        if(!response.write(data)){
-          stream.pause();
-        };
+      stream.pipe(response);
+      request.on('close', function(){
+        file.close(function(){
+          self.log.debug('(' + ruid + ') Connection closed prematurely');
+        });
       });
-      response.on('drain', function(){
-        stream.resume();
-      });
-      var responseErrorHandler = function(error){
-        self.log.debug('(' + ruid + ') Response stream closed too early:' + error);
-      };
-      response.on('error', responseErrorHandler);
-      stream.on('end', function(){
+      response.on('close', function(){
         self.log.debug('(' + ruid + ') File downloaded');
-        response.removeListener('error', responseErrorHandler);
-        response.end();
       });
     });
   };
@@ -249,3 +241,28 @@ Storage = function() {
 
 storage = new Storage();
 storage.start();
+
+//       stream.on('data', function(data){
+//        if(!response.write(data)){
+//          stream.pause();
+//        };
+//      });
+//      response.on('drain', function(){
+//        stream.resume();
+//      });
+//      var responseErrorHandler = function(error){
+//        self.log.debug('(' + ruid + ') Response stream error reported:' + error);
+//      };
+//      response.on('error', responseErrorHandler);
+//      var responseClosedHandler = function(){
+//        self.log.debug('(' + ruid + ') Response stream closed prematurely');
+//        stream.destroy();
+//      };
+//      response.on('close', responseClosedHandler);
+//      stream.on('end', function(){
+//        self.log.debug('(' + ruid + ') File downloaded');
+//        response.removeListener('error', responseErrorHandler);
+//        response.removeListener('close', responseClosedHandler);
+//        response.end();
+//      });
+
