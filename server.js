@@ -57,7 +57,7 @@ Storage = function() {
     self.log.info("Connecting to database");
     Mongo.connect(self.configuration.mongodb.url, function(error, db){
       if(error){
-        self.handleError('Can not connect to database');
+        self.handleError('Database connection problem');
       }else{
         self.database = db;
         self.log.info('Database connected');
@@ -158,11 +158,21 @@ Storage = function() {
       });
       stream = file.stream(true);
       stream.on('data', function(data){
-        response.write(data);
+        if(!response.write(data)){
+          stream.pause();
+        };
       });
+      response.on('drain', function(){
+        stream.resume();
+      });
+      var responseErrorHandler = function(error){
+        self.log.debug('(' + ruid + ') Response stream closed too early:' + error);
+      };
+      response.on('error', responseErrorHandler);
       stream.on('end', function(){
-        response.end();
         self.log.debug('(' + ruid + ') File downloaded');
+        response.removeListener('error', responseErrorHandler);
+        response.end();
       });
     });
   };
