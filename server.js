@@ -164,7 +164,9 @@ Storage = function() {
         });
       });
       response.on('close', function(){
-        self.log.debug('(' + ruid + ') File downloaded');
+        file.close(function(){
+          self.log.debug('(' + ruid + ') File downloaded');
+        });
       });
     });
   };
@@ -173,50 +175,25 @@ Storage = function() {
   this.handleUpload = function(response, ruid, path, request){
     self.log.debug('(' + ruid + ') Uploading file ' + path);
     var gs = new Mongo.GridStore(self.database, path, "w");
-    var done = false;
-    var pool = [];
-    // Buffer request until file is opened
-    request.on('data', onBufferData = function(data){
-      pool.push(data);
-    });
-    request.on('end', onBufferEnd = function(){
-      done = true;
-    });
+    // Postpone request till connected to MongoDB
+    request.pause();
+    // Connect
     gs.open(function(error, file){
       if(error){
         response.end();
         self.log.debug('(' + ruid + ') Could not open file: ' + error);
-        done = true;
-        pool = [];
         return;
       }
-      // Push buffered data to file
-      for(index in pool){
-        if(pool[index]){
-          file.write(pool[index], function() {});
-        };
-      };
-      // Clean buffering
-      pool = [];
-      request.removeListener('data', onBufferData);
-      request.removeListener('end', onBufferEnd);
-      // Called when file uploaded and closed
-      var fileClose = function(){
-        self.log.debug('(' + ruid + ') File uploaded.');
-        response.end('OK');
-      };
-      if(done){
-        // All data were buffered, close file
-        file.close(fileClose);
-      }else{
-        // Continue the upload
-        request.on('data', function(data){
-          file.write(data, function(){});
+      // Start upload into the file
+      request.resume();
+      request.pipe(file);
+      // Clean up after whole request
+      request.on('end', function(){
+        file.close(function() {
+          self.log.debug('(' + ruid + ') File uploaded.');
+          response.end('OK');
         });
-        request.on('end', function(){
-          file.close(fileClose);
-        });
-      };
+      });
     });
   };
 
@@ -241,28 +218,3 @@ Storage = function() {
 
 storage = new Storage();
 storage.start();
-
-//       stream.on('data', function(data){
-//        if(!response.write(data)){
-//          stream.pause();
-//        };
-//      });
-//      response.on('drain', function(){
-//        stream.resume();
-//      });
-//      var responseErrorHandler = function(error){
-//        self.log.debug('(' + ruid + ') Response stream error reported:' + error);
-//      };
-//      response.on('error', responseErrorHandler);
-//      var responseClosedHandler = function(){
-//        self.log.debug('(' + ruid + ') Response stream closed prematurely');
-//        stream.destroy();
-//      };
-//      response.on('close', responseClosedHandler);
-//      stream.on('end', function(){
-//        self.log.debug('(' + ruid + ') File downloaded');
-//        response.removeListener('error', responseErrorHandler);
-//        response.removeListener('close', responseClosedHandler);
-//        response.end();
-//      });
-
