@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-var Mongo = require('mongodb');
 var Http = require('http');
 var Url = require('url');
 var FS = require('fs');
@@ -34,7 +33,7 @@ Storage = function() {
     self.log.cli();
     self.log.info('Bootstraping');
     self.loadConfiguration();
-    self.connectDatabase(this.startHttpServer);
+    self.loadDriver();
   };
 
   // Loads configuration from file
@@ -46,25 +45,29 @@ Storage = function() {
     self.configuration = JSON.parse(FS.readFileSync(self.config_file));
   };
 
+  // Load driver for data storage
+  this.loadDriver = function(){
+    self.log.info("Loading driver '" + self.configuration.driver + "'");
+    var driverClass = require('./' + self.configuration.driver + '.js').driver;
+    var driver = new driverClass();
+    // Pass environment to driver
+    driver.configuration = self.configuration;
+    driver.log = self.log;
+    // Mount handlers
+    self.handleListFiles = driver.handleListFiles;
+    self.handleDownload = driver.handleDownload;
+    self.handleUpload = driver.handleUpload;
+    self.handleDelete = driver.handleDelete;
+    // Setup driver
+    driver.setup(this.startHttpServer);
+  };
+
   // Handles fatal errors
   this.handleError = function(message){
     self.log.error(message);
     process.exit(1);
   };
 
-  // Connect to database
-  this.connectDatabase = function(callback){
-    self.log.info("Connecting to database");
-    Mongo.connect(self.configuration.mongodb.url, function(error, db){
-      if(error){
-        self.handleError('Database connection problem');
-      }else{
-        self.database = db;
-        self.log.info('Database connected');
-        if(callback) callback();
-      }
-    });
-  };
 
   // Start HTTP server
   this.startHttpServer = function(){
@@ -90,7 +93,7 @@ Storage = function() {
     var appid = request.headers['x-appid'];
     winston.debug('(' + ruid + ') Requests Appid = ' + appid);
     // Path to work with
-    var path = appid + ":" + uri.pathname;
+    var path = uri.pathname.substring(1);
     if(request.method == "GET"){
       // GET requests
       if(uri.pathname == "/_list_files"){
@@ -98,112 +101,23 @@ Storage = function() {
         self.handleListFiles(response, ruid, appid);
       }else{
         // File downloads
-        self.handleDownload(response, ruid, path, request);
+        self.handleDownload(response, ruid, appid, path, request);
       };
       return;
     };
     if(request.method == "PUT"){
       // File uploads
-      self.handleUpload(response, ruid, path, request);
+      self.handleUpload(response, ruid, appid, path, request);
       return;
     };
     if(request.method == "DELETE"){
       // File deletions
-      self.handleDelete(response, ruid, path);
+      self.handleDelete(response, ruid, appid, path);
       return;
     };
     // Unhandled requests
     winston.info('(' + ruid + ') Invalid request.');
     response.end("Unhandled!");
-  };
-
-  // Handles file listing
-  this.handleListFiles = function(response, ruid, appid){
-    self.log.debug('(' + ruid + ') Listing files');
-    self.database.collection('fs.files', function(error, collection){
-      if(error){
-        self.handleError('(' + ruid + ') Can not access fs.files collection: ' + error);
-        return;
-      }
-      collection.find({ filename: new RegExp('^' + appid + ":") }, function(error, cursor){
-        if(error){
-          response.end();
-          self.log.debug('(' + ruid + ') Listing done with error: ' + error);
-          return;
-        }
-        cursor.each(function(error, file){
-          if(error || file == null){
-            response.end();
-            self.log.debug('(' + ruid + ') Listing done');
-          }else{
-            response.write(file.filename + "\n");
-          };
-        });
-      });
-    });
-  };
-
-  // Handles file downloads
-  this.handleDownload = function(response, ruid, path, request){
-    var gs = new Mongo.GridStore(self.database, path, "r");
-    gs.open(function(error, file){
-      if(error){
-        response.end();
-        self.log.debug('(' + ruid + ') File not downloaded: ' + error);
-        return;
-      }
-      self.log.debug('(' + ruid + ') Downloading file ' + path);
-      response.writeHead(200, {
-        'Content-length': file.length
-      });
-      stream = file.stream(true);
-      stream.pipe(response);
-      request.on('close', function(){
-        file.close(function(){
-          self.log.debug('(' + ruid + ') Connection closed prematurely');
-        });
-      });
-      response.on('close', function(){
-        file.close(function(){
-          self.log.debug('(' + ruid + ') File downloaded');
-        });
-      });
-    });
-  };
-
-  // Handles file uploads
-  this.handleUpload = function(response, ruid, path, request){
-    self.log.debug('(' + ruid + ') Uploading file ' + path);
-    var gs = new Mongo.GridStore(self.database, path, "w");
-    // Postpone request till connected to MongoDB
-    request.pause();
-    // Connect
-    gs.open(function(error, file){
-      if(error){
-        response.end();
-        self.log.debug('(' + ruid + ') Could not open file: ' + error);
-        return;
-      }
-      // Start upload into the file
-      request.resume();
-      request.pipe(file);
-      // Clean up after whole request
-      request.on('end', function(){
-        file.close(function() {
-          self.log.debug('(' + ruid + ') File uploaded.');
-          response.end('OK');
-        });
-      });
-    });
-  };
-
-  // Handles file deletions
-  this.handleDelete = function(response, ruid, path){
-    self.log.debug('(' + ruid + ') Deleting file ' + path);
-    Mongo.GridStore.unlink(self.database, path, function(){
-      self.log.debug('(' + ruid + ') File deleted');
-      response.end('OK');
-    });
   };
 
   // Generated unique ID per request
